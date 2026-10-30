@@ -183,7 +183,6 @@ $("form-login").addEventListener("submit", async ev => {
   } finally { $("entrar").disabled = false; $("entrar").textContent = "Entrar no painel"; }
 });
 $("sair").onclick = () => { guardar.del("rota_painel"); location.reload(); };
-try { const s = JSON.parse(guardar.get("rota_painel") || "null"); if (s && s.code && s.chave) { loja = s; abrirPainel(); } } catch {}
 
 function abrirPainel() {
   $("tela-login").hidden = true; $("tela-painel").hidden = false;
@@ -191,6 +190,7 @@ function abrirPainel() {
   iniciarMapa();
   const es = new EventSource(`https://ntfy.sh/rotamotoboy_${loja.code}/sse?since=12h`);
   es.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } fila = fila.then(() => receber(m)).catch(() => {}); };
+  setTimeout(render, 5000); // sem avisos nas últimas 12 h: troca o "Carregando…" pela mensagem de vazio
   setInterval(render, 30000);
 }
 
@@ -378,6 +378,11 @@ function render() {
   }
   if (!n) log.innerHTML = '<li><span></span><span></span><span class="note" style="margin:0">Os avisos de hoje aparecem aqui, com o horário.</span></li>';
 }
+
+// Entrada automática ("manter conectado"): fica no fim, depois de tudo acima estar pronto.
+let salvo = null;
+try { salvo = JSON.parse(guardar.get("rota_painel") || "null"); } catch {}
+if (salvo && salvo.code && salvo.chave) { loja = salvo; abrirPainel(); }
 </script>
 </body>
 </html>
