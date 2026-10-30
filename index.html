@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rota do Motoboy · Painel</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: barra escura fixa; à esquerda status e ações, à direita mapa e avisos; uma coluna no celular. */
+:root {
+  --bg: #f3f4f1; --surface: #fff; --fg: #1d2220; --muted: #646b67; --line: #dcdfda;
+  --asphalt: #2a302d; --on-asphalt: #f3f4f1; --accent: #e2591b; --erro: #c0392b;
+  --s0: #b97a00; --s0b: #fff3d6; --s1: #1f62c9; --s1b: #e3edfc; --s2: #1d8a52; --s2b: #def4e7;
+  --s4: #646b67; --s4b: #e6e8e4; --s5: #0f7c7a; --s5b: #ddf2f1;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #141816; --surface: #1d2220; --fg: #eef0ec; --muted: #9aa29d; --line: #323935;
+  --asphalt: #0c0f0d; --accent: #ff7a3d; --erro: #ff8a7a;
+  --s0: #f2b437; --s0b: #3a2e12; --s1: #7aa8f5; --s1b: #18294a; --s2: #4fd08c; --s2b: #123323;
+  --s4: #9aa29d; --s4b: #262c29; --s5: #4fd0c8; --s5b: #123331; color-scheme: dark } }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.45 }
+button, input { font: inherit; color: inherit }
+button { cursor: pointer }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px }
+.bar { position: sticky; top: 0; z-index: 1000; background: var(--asphalt); color: var(--on-asphalt) }
+.bar-in { max-width: 1240px; margin: 0 auto; padding: 12px 20px; display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap }
+.brand { font-family: var(--display); font-weight: 800; font-size: 24px; letter-spacing: .03em; text-transform: uppercase; display: flex; gap: 10px; align-items: center }
+.brand i { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); display: inline-block }
+.bar .code { font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: .12em }
+.bar .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
+.bar button { background: color-mix(in srgb, var(--on-asphalt) 12%, transparent); border: 0; color: var(--on-asphalt); padding: 8px 12px; border-radius: 8px; font-weight: 700; font-size: 14px }
+main { max-width: 1240px; margin: 0 auto; padding: 20px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; align-items: start }
+@media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr) } }
+.col { display: grid; gap: 20px; min-width: 0 }
+h2 { font-family: var(--display); font-weight: 700; font-size: 21px; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 10px }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px }
+.lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; display: block; margin-bottom: 6px }
+.note { color: var(--muted); font-size: 13px; margin: 8px 0 0 }
+input[type=text], input[type=password] { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg) }
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 10px 14px; border-radius: 10px; font-weight: 700 }
+.btn.dark { background: var(--asphalt); border-color: var(--asphalt); color: var(--on-asphalt) }
+.btn.go { background: var(--accent); border-color: var(--accent); color: #fff }
+.btn.ghost { color: var(--accent) }
+.btn:disabled { opacity: .5; cursor: wait }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
+.row > input[type=text] { flex: 1 1 200px; min-width: 0 }
+a.btn { color: inherit; text-decoration: none }
+[hidden] { display: none !important }
+.cards { display: grid; gap: 10px }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px }
+.card .top { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap }
+.card .nm { font-family: var(--display); font-weight: 700; font-size: 24px; text-transform: uppercase; line-height: 1 }
+.card .since { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums }
+.card .acts { display: flex; gap: 8px; flex-wrap: wrap }
+.card .acts .btn { padding: 7px 11px; font-size: 13px }
+.pill { display: inline-flex; gap: 7px; align-items: center; padding: 4px 11px; border-radius: 99px; font-weight: 700; font-size: 13px }
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor }
+.st0 { color: var(--s0); background: var(--s0b) } .st1 { color: var(--s1); background: var(--s1b) }
+.st2, .st3 { color: var(--s2); background: var(--s2b) } .st4 { color: var(--s4); background: var(--s4b) } .st5 { color: var(--s5); background: var(--s5b) }
+.empty { border: 2px dashed var(--line); border-radius: 14px; padding: 18px; color: var(--muted); text-align: center }
+#map { height: 380px; border-radius: 14px; border: 1px solid var(--line); overflow: hidden; position: relative }
+#map-vazio { position: absolute; inset: auto 12px 12px 12px; z-index: 500; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; color: var(--muted); font-size: 13px }
+.log { list-style: none; margin: 0; padding: 0 }
+.log li { display: grid; grid-template-columns: 52px 14px minmax(0, 1fr); gap: 10px; padding: 9px 4px; border-top: 1px solid var(--line) }
+.log li:first-child { border-top: 0 }
+.log time { font-weight: 700; font-variant-numeric: tabular-nums }
+.log .d { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--accent) }
+.log .bad { color: var(--erro) }
+.pinout { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: .1em; margin-top: 10px }
+.login { max-width: 440px; margin: 48px auto; padding: 0 20px }
+.login .box { display: grid; gap: 14px; padding: 22px }
+.login h1 { font-family: var(--display); font-weight: 800; font-size: 34px; text-transform: uppercase; margin: 0; line-height: 1 }
+.err { color: var(--erro); font-size: 14px; min-height: 1em }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--asphalt); color: var(--on-asphalt); padding: 11px 16px; border-radius: 10px; font-weight: 700; z-index: 2000; max-width: calc(100% - 32px) }
+.moto { width: 18px; height: 18px; border-radius: 50%; background: #e2591b; border: 3px solid #fff }
+.leaflet-tooltip { font-family: var(--body); font-weight: 700 }
+</style>
+</head>
+<body>
+
+<!-- ENTRADA -->
+<div class="login" id="tela-login">
+  <form class="box" id="form-login">
+    <h1>Painel do dono</h1>
+    <p class="note" style="margin:0">Digite a senha da loja, a mesma que você usa no app do celular.</p>
+    <div><label class="lbl" for="senha">Senha da loja</label><input id="senha" type="password" autocomplete="current-password"></div>
+    <label class="row" style="font-size:14px"><input id="lembrar" type="checkbox"> Manter conectado neste computador</label>
+    <button class="btn dark" id="entrar" type="submit">Entrar no painel</button>
+    <div class="err" id="err-login"></div>
+  </form>
+</div>
+
+<!-- PAINEL -->
+<div id="tela-painel" hidden>
+  <header class="bar"><div class="bar-in">
+    <div class="brand"><i></i>Rota do Motoboy</div>
+    <div class="tools">
+      <span>Loja <span class="code" id="codigo"></span></span>
+      <button id="som" type="button">Ativar som e notificações</button>
+      <button id="sair" type="button">Sair</button>
+    </div>
+  </div></header>
+  <main>
+    <div class="col">
+      <section class="box">
+        <h2>Avisar motoboy</h2>
+        <label class="lbl" for="ped">Nº do pedido ou cliente (opcional)</label>
+        <div class="row">
+          <input id="ped" type="text" placeholder="#482 · Rua das Flores" maxlength="80" autocomplete="off">
+          <button class="btn go" id="todos" type="button">Pedido pronto · avisar todos</button>
+        </div>
+        <p class="note">Só recebe quem está em turno. Para chamar só um, use o botão no cartão dele.</p>
+      </section>
+      <section>
+        <h2>Onde estão agora</h2>
+        <div class="cards" id="cards"><div class="empty">Carregando os avisos das últimas 12 horas…</div></div>
+      </section>
+      <section class="box">
+        <h2>Cadastrar motoboy</h2>
+        <div class="row">
+          <input id="novo-nome" type="text" placeholder="João" autocomplete="off">
+          <button class="btn dark" id="gerar" type="button">Ver senha</button>
+        </div>
+        <div id="pin-res" hidden>
+          <div class="pinout" id="pin-txt"></div>
+          <button class="btn" id="copiar-acesso" type="button">Copiar acesso para enviar</button>
+        </div>
+        <p class="note">A senha sai do nome: o celular da sua sócia mostra a mesma.</p>
+      </section>
+    </div>
+    <div class="col">
+      <section>
+        <h2>Entregas no mapa</h2>
+        <div id="map"><div id="map-vazio">Nenhuma entrega em andamento agora.</div></div>
+      </section>
+      <section class="box">
+        <h2>Avisos de hoje</h2>
+        <ul class="log" id="log"><li><span></span><span></span><span class="note" style="margin:0">Os avisos aparecem aqui, com o horário.</span></li></ul>
+      </section>
+    </div>
+  </main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="cripto.js"></script>
+<script>
+const C = window.RotaCripto;
+const $ = s => document.getElementById(s);
+const KEYS = ["restaurante", "entrega", "base", "inicio", "fim", "entregue"];
+const PILL = ["No restaurante", "Em entrega", "Disponível", "Disponível", "Fora do turno", "Entregue, voltando"];
+const ENTREGA = 1, INICIO = 3, FIM = 4;
+const idx = s => KEYS.indexOf(s);
+const hhmm = ms => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const ha = ms => { const m = Math.max(0, Math.floor((Date.now() - ms) / 60000)); return m < 1 ? "agora mesmo" : m < 60 ? `há ${m} min` : `há ${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`; };
+const fmt = c => c.length === 8 ? c.slice(0, 4) + "-" + c.slice(4) : c;
+function toast(t) { const el = $("toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => el.hidden = true, 2800); }
+const guardar = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} }, del(k) { try { localStorage.removeItem(k); } catch {} } };
+
+let loja = null;            // {code, chave}
+const eventos = new Map();  // id -> aviso
+let fila = Promise.resolve(), somOn = false, audio = null, desenhar = 0;
+
+/* ---------- entrada ---------- */
+$("form-login").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const s = $("senha").value;
+  if (s.length < 6) { $("err-login").textContent = "A senha da loja tem pelo menos 6 caracteres."; return; }
+  $("entrar").disabled = true; $("entrar").textContent = "Conferindo…"; $("err-login").textContent = "";
+  try {
+    const k = await C.derivar(s);
+    loja = { code: C.codigo(k), chave: C.chave(k) };
+    if ($("lembrar").checked) guardar.set("rota_painel", JSON.stringify(loja));
+    abrirPainel();
+  } catch (e) {
+    $("err-login").textContent = "Este navegador não conseguiu conferir a senha. Use Chrome, Edge ou Firefox atualizados.";
+  } finally { $("entrar").disabled = false; $("entrar").textContent = "Entrar no painel"; }
+});
+$("sair").onclick = () => { guardar.del("rota_painel"); location.reload(); };
+try { const s = JSON.parse(guardar.get("rota_painel") || "null"); if (s && s.code && s.chave) { loja = s; abrirPainel(); } } catch {}
+
+function abrirPainel() {
+  $("tela-login").hidden = true; $("tela-painel").hidden = false;
+  $("codigo").textContent = fmt(loja.code);
+  iniciarMapa();
+  const es = new EventSource(`https://ntfy.sh/rotamotoboy_${loja.code}/sse?since=12h`);
+  es.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } fila = fila.then(() => receber(m)).catch(() => {}); };
+  setInterval(render, 30000);
+}
+
+/* ---------- avisos ---------- */
+function parse(m) {
+  if (m.event !== "message") return null;
+  const e = { id: m.id, time: m.time * 1000, nome: m.title || "Motoboy", msg: m.message === "triggered" ? "" : (m.message || ""), status: "", para: "", sig: "", t: 0, r: "" };
+  for (const s of m.tags || []) {
+    if (idx(s) >= 0 || s === "pronto" || s === "acesso") e.status = s;
+    else if (s.startsWith("para:")) e.para = s.slice(5).trim();
+    else if (s.startsWith("s:")) e.sig = s.slice(2);
+    else if (s.startsWith("t:")) e.t = Number(s.slice(2)) || 0;
+    else if (s.startsWith("r:")) e.r = s.slice(2);
+  }
+  return e.status ? e : null;
+}
+async function confere(e) {
+  if (!e.sig) return false;
+  const p = await C.pin(loja.chave, e.nome);
+  const esperado = await C.assinar(p, e.nome, e.status, C.assinado(e.msg, e.r), e.t);
+  return esperado === e.sig && Math.abs(e.time - e.t) < 600000;
+}
+async function receber(m) {
+  const e = parse(m);
+  if (!e || eventos.has(e.id)) return;
+  const deMotoboy = idx(e.status) >= 0;
+  if (deMotoboy) e.ok = await confere(e);
+  eventos.set(e.id, e);
+  const idade = Date.now() - e.time;
+  if (deMotoboy && e.ok && idade < 600000) alertar(`${e.nome} ${frase(e)}`);
+  if (deMotoboy && e.status === "inicio" && idade < 120000) {
+    publicar("Loja", e.ok ? "ok" : "negado", ["acesso", "para:" + e.nome]).catch(() => {});
+  }
+  cancelAnimationFrame(desenhar); desenhar = requestAnimationFrame(render);
+}
+function frase(e) { return e.msg || PILL[idx(e.status)]; }
+async function publicar(title, message, tags) {
+  const r = await fetch("https://ntfy.sh/", { method: "POST", body: JSON.stringify({ topic: "rotamotoboy_" + loja.code, title, message, tags, priority: 4 }) });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+}
+
+/* ---------- som ---------- */
+$("som").onclick = async () => {
+  somOn = !somOn;
+  if (somOn) {
+    try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+    if ("Notification" in window && Notification.permission === "default") { try { await Notification.requestPermission(); } catch {} }
+    bip();
+  }
+  $("som").textContent = somOn ? "Som ligado" : "Ativar som e notificações";
+};
+function bip() {
+  if (!somOn || !audio) return;
+  [0, .18].forEach((t, i) => {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.frequency.value = i ? 990 : 740; o.connect(g); g.connect(audio.destination);
+    g.gain.setValueAtTime(.0001, audio.currentTime + t);
+    g.gain.exponentialRampToValueAtTime(.25, audio.currentTime + t + .02);
+    g.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + t + .16);
+    o.start(audio.currentTime + t); o.stop(audio.currentTime + t + .17);
+  });
+}
+function alertar(txt) {
+  bip();
+  if (somOn && "Notification" in window && Notification.permission === "granted" && document.hidden) {
+    try { new Notification("Rota do Motoboy", { body: txt }); } catch {}
+  }
+}
+
+/* ---------- ações ---------- */
+async function avisarPronto(para, btn) {
+  const ped = $("ped").value.trim().slice(0, 80) || "Pode vir buscar";
+  btn.disabled = true;
+  try {
+    await publicar("Loja", ped, para ? ["pronto", "para:" + para] : ["pronto"]);
+    $("ped").value = "";
+    toast("Avisado: " + (para || "todos os motoboys"));
+  } catch { toast("Não foi enviado. Verifique a internet e tente de novo."); }
+  btn.disabled = false;
+}
+$("todos").onclick = () => avisarPronto(null, $("todos"));
+const linkCliente = r => location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "") + "rastreio.html#" + r;
+async function copiar(txt) {
+  try { await navigator.clipboard.writeText(txt); toast("Copiado"); }
+  catch { window.prompt("Copie o texto:", txt); }
+}
+let acesso = "";
+$("gerar").onclick = async () => {
+  const n = $("novo-nome").value.trim();
+  if (!n) { toast("Digite o nome do motoboy"); return; }
+  const p = await C.pin(loja.chave, n);
+  $("pin-txt").textContent = `${n} · ${p}`;
+  $("pin-res").hidden = false;
+  acesso = `Seu acesso ao app Rota do Motoboy\nCódigo da loja: ${fmt(loja.code)}\nSeu nome: ${n}\nSua senha: ${p}\nNo app, escolha "Sou o motoboy" e toque em Iniciar turno.`;
+};
+$("copiar-acesso").onclick = () => copiar(acesso);
+
+/* ---------- mapa das entregas ---------- */
+let mapa = null;
+const rastreios = new Map(); // r -> {es, marker, nome}
+function iniciarMapa() {
+  if (!window.L || mapa) return;
+  mapa = L.map("map").setView([-15.8, -47.9], 4);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(mapa);
+}
+function acompanhar(ativos) {
+  for (const [r, t] of rastreios) if (!ativos.has(r)) { t.es.close(); if (t.marker) t.marker.remove(); rastreios.delete(r); }
+  for (const [r, nome] of ativos) {
+    if (rastreios.has(r)) continue;
+    const t = { es: new EventSource(`https://ntfy.sh/rotamotoboy_r_${r}/sse?since=all`), marker: null, nome };
+    t.es.onmessage = ev => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.event !== "message" || !(m.tags || []).includes("pos") || !mapa) return;
+      let p; try { p = JSON.parse(m.message); } catch { return; }
+      if (!t.marker) {
+        t.marker = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: "", html: '<div class="moto"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }) })
+          .bindTooltip(t.nome, { permanent: true, direction: "top", offset: [0, -10] }).addTo(mapa);
+        enquadrar();
+      } else t.marker.setLatLng([p.lat, p.lng]);
+    };
+    rastreios.set(r, t);
+  }
+  $("map-vazio").hidden = ativos.size > 0;
+}
+function enquadrar() {
+  const pts = [...rastreios.values()].filter(t => t.marker).map(t => t.marker.getLatLng());
+  if (pts.length === 1) mapa.setView(pts[0], 15);
+  else if (pts.length > 1) mapa.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
+}
+
+/* ---------- tela ---------- */
+function el(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+function render() {
+  const lista = [...eventos.values()].sort((a, b) => b.time - a.time);
+  const ultimo = new Map();
+  for (const e of lista) {
+    if (idx(e.status) < 0 || !e.ok) continue;
+    const k = C.norm(e.nome);
+    if (!ultimo.has(k)) ultimo.set(k, e);
+  }
+  const cards = [...ultimo.values()].sort((a, b) => (idx(a.status) === FIM) - (idx(b.status) === FIM));
+  const box = $("cards"); box.innerHTML = "";
+  if (!cards.length) box.append(el("div", "empty", "Nenhum motoboy em turno ainda. Quando um motoboy iniciar o turno no app dele, ele aparece aqui."));
+  const ativos = new Map();
+  for (const e of cards) {
+    const k = idx(e.status);
+    const c = el("div", "card");
+    const top = el("div", "top");
+    top.append(el("span", "nm", e.nome), el("span", "pill st" + k, PILL[k]));
+    c.append(top, el("div", "since", `desde ${hhmm(e.time)} · ${ha(e.time)}`));
+    const acts = el("div", "acts");
+    if (k === ENTREGA && e.r) {
+      ativos.set(e.r, e.nome);
+      const ped = e.msg.includes(" · ") ? " (" + e.msg.split(" · ").slice(1).join(" · ") + ")" : "";
+      const b1 = el("button", "btn dark", "Copiar link do cliente");
+      b1.onclick = () => copiar(`Seu pedido${ped} saiu para entrega! Acompanhe o motoboy aqui: ${linkCliente(e.r)}`);
+      const b2 = el("a", "btn", "Abrir rastreio"); b2.href = linkCliente(e.r); b2.target = "_blank"; b2.rel = "noopener"; b2.style.textDecoration = "none";
+      acts.append(b1, b2);
+    }
+    if (k !== FIM) {
+      const b = el("button", "btn ghost", "Avisar: pedido pronto");
+      b.onclick = () => avisarPronto(e.nome, b);
+      acts.append(b);
+    }
+    if (acts.children.length) c.append(acts);
+    box.append(c);
+  }
+  acompanhar(ativos);
+
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const log = $("log"); log.innerHTML = "";
+  let n = 0;
+  for (const e of lista) {
+    if (e.time < hoje.getTime() || e.status === "acesso") continue;
+    const k = idx(e.status);
+    const li = el("li");
+    const d = el("span", "d");
+    let txt;
+    if (k >= 0 && !e.ok) { txt = `Aviso em nome de "${e.nome}" com senha errada (ignorado)`; d.style.background = "var(--erro)"; }
+    else if (k >= 0) { txt = `${e.nome} ${e.msg}`; d.style.background = `var(--s${k === 3 ? 2 : k})`; }
+    else txt = `Loja avisou ${e.para || "todos"}: pedido pronto${e.msg ? " · " + e.msg : ""}`;
+    const t = el("span", k >= 0 && !e.ok ? "bad" : "", txt);
+    li.append(el("time", "", hhmm(e.time)), d, t);
+    log.append(li); n++;
+  }
+  if (!n) log.innerHTML = '<li><span></span><span></span><span class="note" style="margin:0">Os avisos de hoje aparecem aqui, com o horário.</span></li>';
+}
+</script>
+</body>
+</html>

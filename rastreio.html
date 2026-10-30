@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Acompanhe sua entrega</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root {
+  --bg: #f3f4f1; --surface: #fff; --fg: #1d2220; --muted: #646b67; --line: #dcdfda;
+  --asphalt: #2a302d; --on-asphalt: #f3f4f1; --accent: #e2591b;
+  --rota: #1f62c9; --rota-bg: #e3edfc; --ok: #0f7c7a; --ok-bg: #ddf2f1; --warn: #b97a00; --warn-bg: #fff3d6;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #141816; --surface: #1d2220; --fg: #eef0ec; --muted: #9aa29d; --line: #323935;
+  --asphalt: #0c0f0d; --accent: #ff7a3d; --rota: #7aa8f5; --rota-bg: #18294a;
+  --ok: #4fd0c8; --ok-bg: #123331; --warn: #f2b437; --warn-bg: #3a2e12; color-scheme: dark } }
+* { box-sizing: border-box }
+html, body { height: 100% }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; display: flex; flex-direction: column }
+header { background: var(--asphalt); color: var(--on-asphalt); padding: calc(12px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 12px max(16px, env(safe-area-inset-left, 0px)) }
+.brand { font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: .03em; text-transform: uppercase; display: flex; gap: 10px; align-items: center }
+.brand i { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); display: inline-block }
+.card { margin: 12px max(16px, env(safe-area-inset-left, 0px)) 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 4px }
+.st { font-family: var(--display); font-weight: 800; font-size: 30px; line-height: 1.05; text-transform: uppercase; text-wrap: balance }
+.st.rota { color: var(--rota) } .st.ok { color: var(--ok) } .st.warn { color: var(--warn) }
+.sub { color: var(--muted); font-variant-numeric: tabular-nums }
+#map { flex: 1; min-height: 320px; margin: 12px max(16px, env(safe-area-inset-left, 0px)); border-radius: 14px; border: 1px solid var(--line); overflow: hidden }
+#map.off { display: none }
+.fim { flex: 1; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted) }
+[hidden] { display: none !important }
+.foot { margin: 0 max(16px, env(safe-area-inset-left, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)); color: var(--muted); font-size: 13px }
+.moto { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 4px solid #fff; box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent) }
+</style>
+</head>
+<body>
+<header><div class="brand"><i></i>Acompanhe sua entrega</div></header>
+<section class="card" aria-live="polite">
+  <div class="st" id="st">Procurando o entregador…</div>
+  <div class="sub" id="sub">A posição aparece assim que o celular do entregador enviar a primeira localização.</div>
+</section>
+<div id="map"></div>
+<div class="fim" id="fim" hidden></div>
+<p class="foot">A localização aparece só enquanto o pedido está a caminho e para quando o entregador confirma a entrega.</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const id = location.hash.slice(1).toLowerCase().replace(/[^a-z0-9]/g, "");
+const $ = s => document.getElementById(s);
+const hhmm = ms => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+let nome = "", ultimo = 0, terminado = false, pts = [], marker = null, linha = null, es = null, centrou = false;
+
+function status(txt, cls, sub) {
+  $("st").textContent = txt;
+  $("st").className = "st " + (cls || "");
+  $("sub").textContent = sub;
+}
+
+let map = null;
+if (window.L) {
+  map = L.map("map", { zoomControl: true }).setView([-15.8, -47.9], 4);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "© OpenStreetMap"
+  }).addTo(map);
+}
+
+function posicao(p) {
+  if (terminado || typeof p.lat !== "number") return;
+  ultimo = p.t || Date.now();
+  pts.push([p.lat, p.lng]);
+  if (map) {
+    if (!marker) {
+      marker = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: "", html: '<div class="moto"></div>', iconSize: [22, 22], iconAnchor: [11, 11] }) }).addTo(map);
+      linha = L.polyline(pts, { color: "#e2591b", weight: 4, opacity: .6 }).addTo(map);
+    } else {
+      marker.setLatLng([p.lat, p.lng]);
+      linha.setLatLngs(pts);
+    }
+    if (!centrou) { map.setView([p.lat, p.lng], 16); centrou = true; } else map.panTo([p.lat, p.lng]);
+  }
+  atualizarTexto();
+}
+
+function atualizarTexto() {
+  if (terminado || !ultimo) return;
+  const seg = Math.round((Date.now() - ultimo) / 1000);
+  const ha = seg < 60 ? "agora mesmo" : "há " + Math.round(seg / 60) + " min";
+  if (seg > 180) status("A caminho", "warn", "Sem sinal do entregador " + ha + ". Pode ser falta de internet no caminho.");
+  else status("A caminho", "rota", (nome ? nome + " está levando seu pedido · " : "") + "posição atualizada " + ha);
+}
+setInterval(atualizarTexto, 15000);
+
+function fim(entregue, ms) {
+  terminado = true;
+  if (es) es.close();
+  if (map) { map.remove(); map = null; }
+  $("map").classList.add("off");
+  if (entregue) status("Pedido entregue", "ok", "Entregue às " + hhmm(ms) + ". Bom apetite!");
+  else status("Rastreamento encerrado", "", "O entregador encerrou o rastreamento às " + hhmm(ms) + ".");
+  $("fim").hidden = false;
+  $("fim").textContent = "A localização do entregador não é mais compartilhada.";
+}
+
+function mensagem(m) {
+  if (m.event !== "message") return;
+  const tags = m.tags || [];
+  if (m.title) nome = m.title;
+  if (tags.includes("entregue")) return fim(true, m.time * 1000);
+  if (tags.includes("encerrado")) return fim(false, m.time * 1000);
+  if (tags.includes("pos")) { try { posicao(JSON.parse(m.message)); } catch (e) {} }
+}
+
+if (id.length < 12) {
+  status("Link incompleto", "warn", "Confira se você abriu o link inteiro que a loja enviou.");
+  $("map").classList.add("off");
+} else {
+  es = new EventSource("https://ntfy.sh/rotamotoboy_r_" + id + "/sse?since=all");
+  es.onmessage = e => { try { mensagem(JSON.parse(e.data)); } catch (x) {} };
+}
+</script>
+</body>
+</html>
