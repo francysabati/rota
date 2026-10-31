@@ -109,13 +109,17 @@ a.btn { color: inherit; text-decoration: none }
   <main>
     <div class="col">
       <section class="box">
-        <h2>Avisar motoboy</h2>
-        <label class="lbl" for="ped">Nº do pedido ou cliente (opcional)</label>
+        <h2>Pedido pronto</h2>
+        <label class="lbl" for="ped">Nº do pedido (obrigatório)</label>
         <div class="row">
-          <input id="ped" type="text" placeholder="#482 · Rua das Flores" maxlength="80" autocomplete="off">
-          <button class="btn go" id="todos" type="button">Pedido pronto · avisar todos</button>
+          <input id="ped" type="text" placeholder="#501" maxlength="40" autocomplete="off">
+          <button class="btn go" id="todos" type="button">Enviar pedido pronto ao motoboy</button>
         </div>
-        <p class="note">Só recebe quem está em turno. Para chamar só um, use o botão no cartão dele.</p>
+        <p class="note">O motoboy só consegue levar pedidos cadastrados aqui. O link do cliente já fica pronto na lista abaixo.</p>
+      </section>
+      <section>
+        <h2>Pedidos em aberto</h2>
+        <div class="cards" id="pedidos"><div class="empty">Nenhum pedido em aberto. Cadastre acima cada pedido pronto.</div></div>
       </section>
       <section>
         <h2>Onde estão agora</h2>
@@ -197,9 +201,10 @@ function abrirPainel() {
 /* ---------- avisos ---------- */
 function parse(m) {
   if (m.event !== "message") return null;
-  const e = { id: m.id, time: m.time * 1000, nome: m.title || "Motoboy", msg: m.message === "triggered" ? "" : (m.message || ""), status: "", para: "", sig: "", t: 0, rs: [] };
+  const e = { id: m.id, time: m.time * 1000, nome: m.title || "Motoboy", msg: m.message === "triggered" ? "" : (m.message || ""), status: "", para: "", sig: "", t: 0, rs: [], p: "" };
   for (const s of m.tags || []) {
-    if (idx(s) >= 0 || s === "pronto" || s === "acesso") e.status = s;
+    if (idx(s) >= 0 || s === "pronto" || s === "acesso" || s === "cancelado") e.status = s;
+    else if (s.startsWith("p:")) e.p = s.slice(2); // pedido cadastrado pela loja
     else if (s.startsWith("para:")) e.para = s.slice(5).trim();
     else if (s.startsWith("s:")) e.sig = s.slice(2);
     else if (s.startsWith("t:")) e.t = Number(s.slice(2)) || 0;
@@ -219,6 +224,7 @@ async function receber(m) {
   if (!e || eventos.has(e.id)) return;
   const deMotoboy = idx(e.status) >= 0;
   if (deMotoboy) e.ok = await confere(e);
+  e.seq = eventos.size; // ordem de chegada: desempata avisos do mesmo segundo
   eventos.set(e.id, e);
   const idade = Date.now() - e.time;
   if (deMotoboy && e.ok && idade < 600000) alertar(`${e.nome} ${frase(e)}`);
@@ -262,15 +268,30 @@ function alertar(txt) {
 }
 
 /* ---------- ações ---------- */
+// mesmas regras do app: tira vírgula e dois-pontos (separam os pedidos no aviso), até 40 letras
+const limparPedido = s => s.replace(/[,:\n\r]/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+function novoRastreio() {
+  const a = "abcdefghijkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint32Array(16));
+  return Array.from(r, x => a[x % a.length]).join("");
+}
 async function avisarPronto(para, btn) {
-  const ped = $("ped").value.trim().slice(0, 80) || "Pode vir buscar";
+  const ped = limparPedido($("ped").value);
+  if (!ped) { toast("Digite o número do pedido"); $("ped").focus(); return; }
   btn.disabled = true;
   try {
-    await publicar("Loja", ped, para ? ["pronto", "para:" + para] : ["pronto"]);
+    const tags = ["pronto", "p:" + novoRastreio()];
+    if (para) tags.push("para:" + para);
+    await publicar("Loja", ped, tags);
     $("ped").value = "";
-    toast("Avisado: " + (para || "todos os motoboys"));
+    toast(`Pedido ${ped} enviado ` + (para ? "para " + para : "aos motoboys em turno"));
   } catch { toast("Não foi enviado. Verifique a internet e tente de novo."); }
   btn.disabled = false;
+}
+async function cancelarPedido(id, num, btn) {
+  if (!confirm(`Cancelar o pedido ${num}? Ele sai da lista do motoboy e daqui.`)) return;
+  btn.disabled = true;
+  try { await publicar("Loja", num, ["cancelado", "p:" + id]); toast(`Pedido ${num} cancelado`); }
+  catch { toast("Não foi enviado. Verifique a internet e tente de novo."); btn.disabled = false; }
 }
 $("todos").onclick = () => avisarPronto(null, $("todos"));
 const linkCliente = r => location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "") + "rastreio.html#" + r;
@@ -325,7 +346,7 @@ function enquadrar() {
 /* ---------- tela ---------- */
 function el(tag, cls, txt) { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
 function render() {
-  const lista = [...eventos.values()].sort((a, b) => b.time - a.time);
+  const lista = [...eventos.values()].sort((a, b) => (b.time - a.time) || (b.seq - a.seq));
   const ultimo = new Map();
   for (const e of lista) {
     if (idx(e.status) < 0 || !e.ok) continue;
@@ -357,17 +378,10 @@ function render() {
     top.append(el("span", "nm", e.nome), el("span", "pill st" + k, rot));
     c.append(top, el("div", "since", `último aviso ${hhmm(e.time)} · ${ha(e.time)}`));
     const acts = el("div", "acts");
-    let primeiro = true;
-    for (const [rid, nomePed] of peds) {
-      if (primeiro) { ativos.set(rid, e.nome); primeiro = false; } // no mapa basta um: a posição é a mesma
-      const ped = nomePed ? ` (${nomePed})` : "";
-      const b1 = el("button", "btn dark", "Copiar link" + (nomePed ? " · " + nomePed : " do cliente"));
-      b1.onclick = () => copiar(`Seu pedido${ped} saiu para entrega! Acompanhe o motoboy aqui: ${linkCliente(rid)}`);
-      const b2 = el("a", "btn", "Abrir rastreio" + (nomePed ? " " + nomePed : "")); b2.href = linkCliente(rid); b2.target = "_blank"; b2.rel = "noopener";
-      acts.append(b1, b2);
-    }
+    const primeiro = [...peds.keys()][0];
+    if (primeiro) ativos.set(primeiro, e.nome); // no mapa basta um: a posição é a mesma
     if (k !== FIM) {
-      const b = el("button", "btn ghost", "Avisar: pedido pronto");
+      const b = el("button", "btn ghost", "Enviar pedido pronto só para " + e.nome);
       b.onclick = () => avisarPronto(e.nome, b);
       acts.append(b);
     }
@@ -375,6 +389,37 @@ function render() {
     box.append(c);
   }
   acompanhar(ativos);
+
+  // pedidos da loja não entregues: "pronto" cria, "saiu" põe a caminho, "entregou"/"cancelado" tiram,
+  // voltou/início/fim tiram os que estavam a caminho com aquele motoboy
+  const pedidosLoja = new Map();
+  for (const e of [...lista].reverse()) {
+    if (e.status === "pronto" && e.p && e.msg) { pedidosLoja.set(e.p, { num: e.msg, estado: "Aguardando o motoboy sair", com: "" }); continue; }
+    if (e.status === "cancelado") { pedidosLoja.delete(e.p); continue; }
+    const k = idx(e.status);
+    if (k < 0 || !e.ok) continue;
+    if (k === ENTREGA) for (const r of e.rs) {
+      const [id, ...p] = r.split(":");
+      pedidosLoja.set(id, { num: pedidosLoja.get(id)?.num || p.join(":"), estado: "A caminho com " + e.nome, com: C.norm(e.nome) });
+    }
+    else if (k === ENTREGUE) for (const r of e.rs) pedidosLoja.delete(r.split(":")[0]);
+    else if (k === BASE || k === INICIO || k === FIM) { const nn = C.norm(e.nome); for (const [id, v] of pedidosLoja) if (v.com === nn) pedidosLoja.delete(id); }
+  }
+  const pb = $("pedidos"); pb.innerHTML = "";
+  if (!pedidosLoja.size) pb.append(el("div", "empty", "Nenhum pedido em aberto. Cadastre acima cada pedido pronto."));
+  for (const [id, v] of pedidosLoja) {
+    const c = el("div", "card");
+    const top = el("div", "top");
+    top.append(el("span", "nm", v.num), el("span", "pill " + (v.com ? "st1" : "st0"), v.estado));
+    const acts = el("div", "acts");
+    const b1 = el("button", "btn dark", "Copiar link do cliente");
+    b1.onclick = () => copiar(`Seu pedido (${v.num}) está com o motoboy da loja! Acompanhe a entrega aqui: ${linkCliente(id)}`);
+    const b2 = el("a", "btn", "Abrir rastreio"); b2.href = linkCliente(id); b2.target = "_blank"; b2.rel = "noopener";
+    acts.append(b1, b2);
+    if (!v.com) { const b3 = el("button", "btn ghost", "Cancelar"); b3.onclick = () => cancelarPedido(id, v.num, b3); acts.append(b3); }
+    c.append(top, acts);
+    pb.append(c);
+  }
 
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const log = $("log"); log.innerHTML = "";
@@ -387,7 +432,8 @@ function render() {
     let txt;
     if (k >= 0 && !e.ok) { txt = `Aviso em nome de "${e.nome}" com senha errada (ignorado)`; d.style.background = "var(--erro)"; }
     else if (k >= 0) { txt = `${e.nome} ${e.msg}`; d.style.background = `var(--s${k === 3 ? 2 : k})`; }
-    else txt = `Loja avisou ${e.para || "todos"}: pedido pronto${e.msg ? " · " + e.msg : ""}`;
+    else if (e.status === "cancelado") txt = `Loja cancelou o pedido ${e.msg}`;
+    else txt = `Loja enviou o pedido pronto ${e.msg}${e.para ? " para " + e.para : ""}`;
     const t = el("span", k >= 0 && !e.ok ? "bad" : "", txt);
     li.append(el("time", "", hhmm(e.time)), d, t);
     log.append(li); n++;
